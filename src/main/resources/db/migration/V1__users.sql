@@ -1,6 +1,3 @@
--- 0) Case-insensitive тип для email (PostgreSQL)
-CREATE EXTENSION IF NOT EXISTS citext;
-
 -- 1) Roles
 CREATE TABLE IF NOT EXISTS roles
 (
@@ -27,7 +24,7 @@ CREATE TABLE IF NOT EXISTS users
 
     avatar            bytea,
 
-    email             citext NOT NULL,         -- login по email
+    email             varchar(255) NOT NULL,   -- login по email
     password_hash     varchar(255) NOT NULL,   -- хранить bcrypt/argon2 hash
 
     first_name        varchar(255),
@@ -41,7 +38,7 @@ CREATE TABLE IF NOT EXISTS users
     last_login_date   timestamptz
     );
 
--- Уникальность email (citext уже case-insensitive)
+-- Уникальность email
 CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email ON users (email);
 
 -- mail_token обычно лучше уникальным (если используешь подтверждение/сброс)
