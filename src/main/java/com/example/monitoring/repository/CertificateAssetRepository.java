@@ -12,4 +12,6 @@ public interface CertificateAssetRepository extends JpaRepository<CertificateAss
     List<CertificateAsset> findByUserIdOrderByCreatedAtDesc(Long userId);
     List<CertificateAsset> findByUserIdAndTypeOrderByCreatedAtDesc(Long userId, String type);
     Optional<CertificateAsset> findByIdAndUserId(Long id, Long userId);
+
+    void deleteByUserId(Long userId);
 }

@@ -1,22 +1,4 @@
--- 1) Roles
-CREATE TABLE IF NOT EXISTS roles
-(
-    id        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    code      varchar(64) NOT NULL,          -- например: SUPER_ADMIN / ADMIN / USER
-    name_en   varchar(255),
-    name_kz   varchar(255),
-    name_ru   varchar(255)
-    );
-
-CREATE UNIQUE INDEX IF NOT EXISTS ux_roles_code ON roles (code);
-
--- Индексы по локализациям делай только если реально фильтруешь/ищешь по ним
--- CREATE INDEX IF NOT EXISTS idx_roles_name_en ON roles (name_en);
--- CREATE INDEX IF NOT EXISTS idx_roles_name_kz ON roles (name_kz);
--- CREATE INDEX IF NOT EXISTS idx_roles_name_ru ON roles (name_ru);
-
-
--- 2) Users (email-only)
+-- Users (email-only)
 CREATE TABLE IF NOT EXISTS users
 (
     id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -52,23 +34,3 @@ CREATE INDEX IF NOT EXISTS idx_users_is_active ON users (is_active);
 CREATE INDEX IF NOT EXISTS idx_users_first_name  ON users (first_name);
 CREATE INDEX IF NOT EXISTS idx_users_last_name   ON users (last_name);
 CREATE INDEX IF NOT EXISTS idx_users_second_name ON users (second_name);
-
-
--- 3) User <-> Roles (many-to-many)
-CREATE TABLE IF NOT EXISTS user_roles
-(
-    user_id bigint NOT NULL,
-    role_id bigint NOT NULL,
-    PRIMARY KEY (user_id, role_id),
-
-    CONSTRAINT fk_user_roles_user
-    FOREIGN KEY (user_id) REFERENCES users(id)
-    ON DELETE CASCADE,
-
-    CONSTRAINT fk_user_roles_role
-    FOREIGN KEY (role_id) REFERENCES roles(id)
-    ON DELETE CASCADE
-    );
-
--- Для запросов "все пользователи с ролью X" лучше композитный индекс:
-CREATE INDEX IF NOT EXISTS idx_user_roles_role_user ON user_roles (role_id, user_id);
