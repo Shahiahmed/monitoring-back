@@ -47,8 +47,19 @@ public class SshMetricsService {
     private final Map<Long, CachedMetrics> cache = new ConcurrentHashMap<>();
 
     public List<ServerMetricsResponse> fetchMetrics(List<DicServer> servers, boolean forceRefresh) {
-        return servers.stream()
+        return servers.parallelStream()
                 .map(s -> fetchMetricsForServer(s, forceRefresh))
+                .toList();
+    }
+
+    /** Возвращает только закешированные данные без SSH-подключений (для AI-контекста). */
+    public List<ServerMetricsResponse> getCachedMetrics(List<DicServer> servers) {
+        return servers.stream()
+                .map(s -> {
+                    CachedMetrics cached = cache.get(s.getId());
+                    if (cached != null && !cached.isExpired(cacheSeconds)) return cached.response;
+                    return ServerMetricsResponse.error(s.getId(), "нет данных в кеше");
+                })
                 .toList();
     }
 

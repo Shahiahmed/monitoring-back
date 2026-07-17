@@ -32,14 +32,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
+        // SSE endpoints pass token as ?token= query param since EventSource can't set headers
+        String raw = null;
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (header == null || !header.startsWith(BEARER_PREFIX)) {
-            filterChain.doFilter(request, response);
-            return;
+        if (header != null && header.startsWith(BEARER_PREFIX)) {
+            raw = header.substring(BEARER_PREFIX.length()).trim();
+        } else {
+            String queryToken = request.getParameter("token");
+            if (queryToken != null && !queryToken.isBlank()) {
+                raw = queryToken.trim();
+            }
         }
-
-        String raw = header.substring(BEARER_PREFIX.length()).trim();
-        if (raw.isEmpty()) {
+        if (raw == null || raw.isEmpty()) {
             filterChain.doFilter(request, response);
             return;
         }
