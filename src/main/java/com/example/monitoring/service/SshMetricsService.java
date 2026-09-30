@@ -1,5 +1,6 @@
 package com.example.monitoring.service;
 
+import com.example.monitoring.dto.ProcessInfo;
 import com.example.monitoring.dto.ServerMetricsResponse;
 import com.example.monitoring.entity.DicServer;
 import net.schmizz.sshj.SSHClient;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -106,6 +108,10 @@ public class SshMetricsService {
             String diskRaw = exec(ssh, "df -h / 2>/dev/null | tail -1");
             DiskStats disk = parseDiskDetailed(diskRaw);
 
+            // Top 10 processes by RSS memory
+            String psRaw = exec(ssh, "ps aux --sort=-%mem 2>/dev/null | head -11");
+            List<ProcessInfo> topProcs = parseTopProcesses(psRaw);
+
             return ServerMetricsResponse.ok(
                     serverId,
                     cpu,
@@ -115,7 +121,8 @@ public class SshMetricsService {
                     mem.totalMb,
                     mem.availableMb,
                     disk.usedGb,
-                    disk.totalGb
+                    disk.totalGb,
+                    topProcs
             );
         }
     }
@@ -206,6 +213,62 @@ public class SshMetricsService {
         } catch (NumberFormatException e) {
             return 0;
         }
+    }
+
+    /**
+     * Парсит вывод `ps aux --sort=-%mem | head -11`.
+     * Формат: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
+     */
+    private List<ProcessInfo> parseTopProcesses(String output) {
+        if (output == null || output.isBlank()) return List.of();
+        List<ProcessInfo> result = new ArrayList<>();
+        String[] lines = output.split("\\n");
+        for (String line : lines) {
+            if (line.startsWith("USER") || line.isBlank()) continue;
+            String[] parts = line.trim().split("\\s+", 11);
+            if (parts.length < 11) continue;
+            try {
+                String pid = parts[1];
+                double cpuPct = Double.parseDouble(parts[2]);
+                double memPct = Double.parseDouble(parts[3]);
+                long rssKb = Long.parseLong(parts[5]);
+                String command = parts[10];
+                String name = extractProcessName(command);
+                result.add(new ProcessInfo(pid, name, cpuPct, memPct, rssKb));
+            } catch (NumberFormatException ignored) {}
+        }
+        return result;
+    }
+
+    /**
+     * Извлекает читаемое имя процесса:
+     * - Java с -jar: берёт имя JAR без пути и расширения (universal-eserv-service)
+     * - Kernel thread [kworker/...]: оставляет как есть
+     * - Остальные: basename первого токена (без пути)
+     */
+    private String extractProcessName(String command) {
+        if (command == null || command.isBlank()) return "?";
+        // Kernel thread
+        if (command.startsWith("[")) {
+            return command.split("\\s")[0];
+        }
+        // Java -jar: ищем -jar <path/to/name.jar>
+        int jarIdx = command.indexOf(" -jar ");
+        if (jarIdx >= 0) {
+            String after = command.substring(jarIdx + 6).trim();
+            // берём первый токен — путь к jar
+            String jarPath = after.split("\\s")[0];
+            // basename без расширения
+            int slash = jarPath.lastIndexOf('/');
+            String jarFile = slash >= 0 ? jarPath.substring(slash + 1) : jarPath;
+            if (jarFile.endsWith(".jar")) jarFile = jarFile.substring(0, jarFile.length() - 4);
+            return jarFile.length() > 40 ? jarFile.substring(0, 40) : jarFile;
+        }
+        // Обычный процесс: basename первого токена
+        String first = command.split("\\s")[0];
+        int slash = first.lastIndexOf('/');
+        String name = slash >= 0 ? first.substring(slash + 1) : first;
+        return name.length() > 40 ? name.substring(0, 40) : name;
     }
 
     private static class CachedMetrics {

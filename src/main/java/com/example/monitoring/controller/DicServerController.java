@@ -86,6 +86,10 @@ public class DicServerController {
                 .description(request.description())
                 .ip(request.ip())
                 .env(env)
+                .warnRam(request.warnRam())
+                .warnDisk(request.warnDisk())
+                .critRam(request.critRam())
+                .critDisk(request.critDisk())
                 .build();
         DicServer saved = serverRepository.save(entity);
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
@@ -103,6 +107,10 @@ public class DicServerController {
         entity.setDescription(request.description());
         entity.setIp(request.ip());
         entity.setEnv(env);
+        entity.setWarnRam(request.warnRam());
+        entity.setWarnDisk(request.warnDisk());
+        entity.setCritRam(request.critRam());
+        entity.setCritDisk(request.critDisk());
         DicServer saved = serverRepository.save(entity);
         return ResponseEntity.ok(toResponse(saved));
     }
@@ -132,6 +140,7 @@ public class DicServerController {
     private DicServerResponse toResponse(DicServer e) {
         Long envId = e.getEnv() != null ? e.getEnv().getId() : null;
         String envNameRu = e.getEnv() != null ? e.getEnv().getNameRu() : null;
-        return new DicServerResponse(e.getId(), e.getActive(), e.getDescription(), e.getIp(), envId, envNameRu);
+        return new DicServerResponse(e.getId(), e.getActive(), e.getDescription(), e.getIp(), envId, envNameRu,
+                e.getWarnRam(), e.getWarnDisk(), e.getCritRam(), e.getCritDisk());
     }
 }

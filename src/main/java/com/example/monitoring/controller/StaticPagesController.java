@@ -21,6 +21,11 @@ public class StaticPagesController {
         return "forward:/servers/index.html";
     }
 
+    @GetMapping({"/servers/detail", "/servers/detail/"})
+    public String serversDetail() {
+        return "forward:/servers/detail/index.html";
+    }
+
     @GetMapping({"/users", "/users/"})
     public String users() {
         return "forward:/users/index.html";
@@ -154,6 +159,41 @@ public class StaticPagesController {
     @GetMapping({"/forgot-password", "/forgot-password/"})
     public String forgotPassword() {
         return "forward:/forgot-password/index.html";
+    }
+
+    @GetMapping({"/statistics/integrations", "/statistics/integrations/"})
+    public String statisticsIntegrations() {
+        return "forward:/statistics/integrations/index.html";
+    }
+
+    @GetMapping({"/wall/integrations", "/wall/integrations/"})
+    public String wallIntegrations() {
+        return "forward:/wall/integrations/index.html";
+    }
+
+    @GetMapping({"/services/my-services", "/services/my-services/"})
+    public String servicesMyServices() {
+        return "forward:/services/my-services/index.html";
+    }
+
+    @GetMapping({"/services/my-services/detail", "/services/my-services/detail/"})
+    public String servicesMyServiceDetail() {
+        return "forward:/services/my-services/detail/index.html";
+    }
+
+    @GetMapping({"/services/my-services/add", "/services/my-services/add/"})
+    public String servicesMyServicesAdd() {
+        return "forward:/services/my-services/add/index.html";
+    }
+
+    @GetMapping({"/services/my-services/client", "/services/my-services/client/"})
+    public String servicesMyServiceClient() {
+        return "forward:/services/my-services/client/index.html";
+    }
+
+    @GetMapping({"/services/my-connections", "/services/my-connections/"})
+    public String servicesMyConnections() {
+        return "forward:/services/my-connections/index.html";
     }
 }
 

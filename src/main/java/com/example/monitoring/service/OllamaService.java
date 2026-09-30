@@ -42,6 +42,7 @@ public class OllamaService {
     private final IncidentService   incidentService;
     private final SshMetricsService sshMetricsService;
     private final DicServerRepository serverRepository;
+    private final KnowledgeBaseService knowledgeBaseService;
 
     private static final String SYSTEM_PROMPT = """
             /no_think
@@ -50,7 +51,14 @@ public class OllamaService {
             Если в сообщении ниже есть раздел "АКТУАЛЬНЫЕ ДАННЫЕ ИЗ СИСТЕМЫ" — используй ТОЛЬКО их, не придумывай данные.
             Отвечай кратко, по делу, только на русском языке. Не используй заголовки (#).
             Если данные уже отфильтрованы в разделе — просто перечисли их, не добавляй лишних серверов.
+            Раздел "СПРАВКА О СИСТЕМЕ" — единственный источник знаний об устройстве сайта.
+            Ничего не додумывай сверх него: не выдумывай названия разделов, кнопок, полей и ролей.
+            Если ответа нет ни в справке, ни в данных — так и скажи и подскажи, в каком разделе
+            интерфейса пользователь найдёт это сам.
             """;
+
+    private static final Pattern NUMBER_WITH_UNIT =
+            Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*(гб|гиб|gb|%|процент|мб|mb)?");
 
     // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -77,6 +85,13 @@ public class OllamaService {
         body.put("messages", messages);
         body.put("stream", true);
         body.put("think", false);
+        body.put("keep_alive", "60m");
+        body.put("num_predict", 600);
+        body.put("options", Map.of(
+            "temperature", 0.3,
+            "top_p", 0.8,
+            "repeat_penalty", 1.1
+        ));
 
         String jsonBody = MAPPER.writeValueAsString(body);
 
@@ -139,12 +154,20 @@ public class OllamaService {
 
     private String buildDataContext(String msg) {
         StringBuilder ctx = new StringBuilder();
+        StringBuilder data = new StringBuilder();
+
+        // Справка об устройстве системы. Живых данных о самом сайте в базе нет,
+        // и без этого блока модель начинает выдумывать разделы, кнопки и роли.
+        String knowledge = knowledgeBaseService.lookup(msg);
+        if (!knowledge.isEmpty()) {
+            ctx.append("\n\n=== СПРАВКА О СИСТЕМЕ ===\n").append(knowledge).append('\n');
+        }
 
         if (needsIncidentData(msg)) {
             try {
                 DateRange range = extractDateRange(msg);
                 IncidentStatsResponse stats = incidentService.stats(range.from, range.to);
-                ctx.append(formatIncidentStats(stats, range.label));
+                data.append(formatIncidentStats(stats, range.label));
             } catch (Exception e) {
                 log.warn("Не удалось получить статистику инцидентов: {}", e.getMessage());
             }
@@ -157,15 +180,16 @@ public class OllamaService {
                 long t0 = System.currentTimeMillis();
                 List<ServerMetricsResponse> metrics = sshMetricsService.fetchMetrics(servers, false);
                 log.info("[AI] Метрики получены за {} мс", System.currentTimeMillis() - t0);
-                ctx.append(formatServerMetrics(servers, metrics, msg));
+                data.append(formatServerMetrics(servers, metrics, msg));
             } catch (Exception e) {
                 log.warn("[AI] Не удалось получить метрики серверов: {}", e.getMessage());
             }
         }
 
-        return ctx.length() > 0
-                ? "\n\n=== АКТУАЛЬНЫЕ ДАННЫЕ ИЗ СИСТЕМЫ ===\n" + ctx
-                : "";
+        if (data.length() > 0) {
+            ctx.append("\n\n=== АКТУАЛЬНЫЕ ДАННЫЕ ИЗ СИСТЕМЫ ===\n").append(data);
+        }
+        return ctx.toString();
     }
 
     // ── Keyword detection ──────────────────────────────────────────────────────
@@ -324,11 +348,25 @@ public class OllamaService {
         if (!less && !more) return null;
         String op = less ? "<" : ">";
 
-        // Ищем число
-        Matcher nm = Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*(гб|гиб|gb|%|процент|мб|mb)?").matcher(msg);
-        if (!nm.find()) return null;
-        double num = Double.parseDouble(nm.group(1).replace(",", "."));
-        String unit = nm.group(2) != null ? nm.group(2).toLowerCase() : "";
+        // Ищем порог. Берём первое число с единицей измерения, а если единиц нигде нет —
+        // первое число, не похожее на год: в вопросе «в 2025 году серверы, где свободно
+        // меньше 8 ГБ» порогом должно стать 8, а не 2025.
+        Matcher nm = NUMBER_WITH_UNIT.matcher(msg);
+        double num = -1;
+        String unit = "";
+        while (nm.find()) {
+            double candidate = Double.parseDouble(nm.group(1).replace(",", "."));
+            String candidateUnit = nm.group(2) != null ? nm.group(2).toLowerCase() : "";
+            if (!candidateUnit.isEmpty()) {
+                num = candidate;
+                unit = candidateUnit;
+                break;
+            }
+            if (num < 0 && !looksLikeYear(candidate)) {
+                num = candidate;
+            }
+        }
+        if (num < 0) return null;
 
         // Определяем метрику
         if (containsAny(msg, "cpu", "процессор", "нагрузк")) {
@@ -348,6 +386,11 @@ public class OllamaService {
         String desc = (isPct ? "RAM% " : (freeQuery ? "ОЗУ свободно " : "ОЗУ использовано "))
                     + op + " " + (isPct ? (int)num + "%" : num + " GB");
         return new ServerFilter(metric, op, num, desc);
+    }
+
+    /** Целое из диапазона годов — почти наверняка год, а не порог по ресурсам. */
+    private boolean looksLikeYear(double value) {
+        return value >= 1990 && value <= 2100 && value == Math.rint(value);
     }
 
     // ── Think-block stripper ───────────────────────────────────────────────────

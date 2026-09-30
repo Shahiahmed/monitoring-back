@@ -5,6 +5,10 @@ public record DicServerRequest(
         Boolean active,
         String description,
         String ip,
-        Long envId
+        Long envId,
+        Integer warnRam,
+        Integer warnDisk,
+        Integer critRam,
+        Integer critDisk
 ) {
 }

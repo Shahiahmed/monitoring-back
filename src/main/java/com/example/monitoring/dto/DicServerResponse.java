@@ -6,6 +6,10 @@ public record DicServerResponse(
         String description,
         String ip,
         Long envId,
-        String envNameRu
+        String envNameRu,
+        Integer warnRam,
+        Integer warnDisk,
+        Integer critRam,
+        Integer critDisk
 ) {
 }
